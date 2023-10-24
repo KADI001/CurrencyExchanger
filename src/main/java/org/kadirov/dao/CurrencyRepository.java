@@ -1,7 +1,7 @@
 package org.kadirov.dao;
 
 import org.kadirov.dao.entity.CurrencyEntity;
-import org.kadirov.model.CurrencyModel;
+
 
 import java.sql.SQLException;
 import java.util.List;
