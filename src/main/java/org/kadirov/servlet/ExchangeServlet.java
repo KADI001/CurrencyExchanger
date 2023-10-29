@@ -1,123 +1,94 @@
 package org.kadirov.servlet;
 
 import com.fasterxml.jackson.core.io.BigDecimalParser;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletContext;
-import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.kadirov.dao.CurrencyRepository;
-import org.kadirov.dao.ExchangeRatesRepository;
-import org.kadirov.dao.entity.CurrencyEntity;
-import org.kadirov.dao.entity.ExchangeRateEntity;
-import org.kadirov.json.JSONReader;
+import org.kadirov.model.ErrorModel;
 import org.kadirov.model.ExchangeModel;
-import org.kadirov.view.mapper.ExchangeViewMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.kadirov.model.ExchangeRateModel;
+import org.kadirov.service.ExchangeRateService;
+import org.kadirov.util.DBExceptionMessages;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.sql.SQLException;
+import java.util.Optional;
 
 @WebServlet("/exchange")
 public class ExchangeServlet extends HttpServlet {
 
-    private static final Logger logger = LoggerFactory.getLogger(ExchangeServlet.class);
-
-    private ExchangeRatesRepository exchangeRatesRepository;
-    private CurrencyRepository currencyRepository;
-    private JSONReader<?> jsonReader;
-    private ExchangeViewMapper exchangeViewMapper;
+    private ObjectMapper jsonReader;
+    private ExchangeRateService exchangeRateService;
 
     @Override
     public void init(ServletConfig config) {
         ServletContext servletContext = config.getServletContext();
 
-        exchangeRatesRepository = (ExchangeRatesRepository) servletContext.getAttribute("exchangeRatesRepository");
-        currencyRepository = (CurrencyRepository) servletContext.getAttribute("currencyRepository");
-        jsonReader = (JSONReader<?>) servletContext.getAttribute("jsonReader");
-        exchangeViewMapper = new ExchangeViewMapper();
+        exchangeRateService = (ExchangeRateService) servletContext.getAttribute("exchangeRateService");
+        jsonReader = new ObjectMapper();
     }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        resp.setContentType("application/json");
-        resp.setCharacterEncoding("UTF-8");
-
         String fromCurrencyCode = req.getParameter("from");
         String toCurrencyCode = req.getParameter("to");
-        BigDecimal amount;
+        String amount = req.getParameter("amount");
+
+        if (fromCurrencyCode == null || fromCurrencyCode.isBlank()) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            jsonReader.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_BAD_REQUEST, "Missing parameter: from"));
+            return;
+        }
+
+        if (toCurrencyCode == null || toCurrencyCode.isBlank()) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            jsonReader.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_BAD_REQUEST, "Missing parameter: to"));
+            return;
+        }
+
+        if (amount == null || amount.isBlank()) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            jsonReader.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_BAD_REQUEST, "Missing parameter: amount"));
+            return;
+        }
+
+        BigDecimal parsedAmount;
 
         try {
-            amount = BigDecimalParser.parse(req.getParameter("amount"));
+            parsedAmount = BigDecimalParser.parse(amount);
         } catch (Exception e) {
-            logger.error("Failed to parse the amount param to BigDecimal", e);
-            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            jsonReader.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_BAD_REQUEST, "Parameter amount is not valid"));
             return;
         }
+
+        Optional<ExchangeRateModel> optionalExchangeRateModel;
 
         try {
-            if (!currencyRepository.existsByCode(fromCurrencyCode)) {
-                resp.sendError(HttpServletResponse.SC_NOT_FOUND, "There is no currency for from");
-                return;
-            }
-
-            if (!currencyRepository.existsByCode(toCurrencyCode)) {
-                resp.sendError(HttpServletResponse.SC_NOT_FOUND, "There is no currency for to");
-                return;
-            }
-        } catch (SQLException sqle) {
-            logger.error("Failed to existsByCode for CurrencyRepository", sqle);
-            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            optionalExchangeRateModel = exchangeRateService.getExchangeRateByCode(fromCurrencyCode, toCurrencyCode);
+        } catch (SQLException e) {
+            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            jsonReader.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, DBExceptionMessages.TROUBLE));
             return;
         }
 
-        try {
-            if (!exchangeRatesRepository.existsByBaseCurrencyCodeAndTargetCurrencyCode(fromCurrencyCode, toCurrencyCode)) {
-                resp.sendError(HttpServletResponse.SC_NOT_FOUND, "There is no any exchange rate with that baseCurrencyCode and targetCurrencyCode");
-                return;
-            }
-        } catch (SQLException sqle) {
-            logger.error("Failed to existsByBaseCurrencyCodeAndTargetCurrencyCode for ExchangeRatesRepository", sqle);
-            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            return;
+        if (optionalExchangeRateModel.isPresent()) {
+            ExchangeRateModel exchangeRate = optionalExchangeRateModel.get();
+            BigDecimal convertedAmount;
+            convertedAmount = parsedAmount.multiply(exchangeRate.rate());
+
+            resp.setStatus(HttpServletResponse.SC_OK);
+            jsonReader.writeValue(resp.getWriter(),
+                    new ExchangeModel(exchangeRate.baseCurrency(), exchangeRate.targetCurrency(), exchangeRate.rate(), parsedAmount, convertedAmount));
+        } else {
+            resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            jsonReader.writeValue(resp.getWriter(),
+                    new ErrorModel(HttpServletResponse.SC_NOT_FOUND, "Couldn't find an exchange rate for that currencies"));
         }
-
-        CurrencyEntity baseCurrency;
-        CurrencyEntity targetCurrency;
-
-        try {
-            baseCurrency = currencyRepository.selectByCode(fromCurrencyCode);
-            targetCurrency = currencyRepository.selectByCode(toCurrencyCode);
-        } catch (SQLException sqle) {
-            logger.error("Failed to selectByCode for CurrencyRepository", sqle);
-            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            return;
-        }
-
-        ExchangeRateEntity exchangeRateEntity;
-
-        try {
-            exchangeRateEntity = exchangeRatesRepository.selectByBaseCurrencyCodeAndTargetCurrencyCode(fromCurrencyCode, toCurrencyCode);
-        } catch (SQLException sqle) {
-            logger.error("Failed to selectByBaseCurrencyCodeAndTargetCurrencyCode for ExchangeRatesRepository", sqle);
-            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            return;
-        }
-
-        BigDecimal convertedAmount = amount.multiply(exchangeRateEntity.getRate());
-
-        ExchangeModel exchangeModel = new ExchangeModel(baseCurrency, targetCurrency, exchangeRateEntity.getRate(), amount, convertedAmount);
-
-        String jsonString = jsonReader.fromObjectToString(exchangeViewMapper.map(exchangeModel));
-        PrintWriter writer = resp.getWriter();
-        writer.write(jsonString);
-        writer.flush();
-        writer.close();
-        resp.setStatus(HttpServletResponse.SC_OK);
     }
 }

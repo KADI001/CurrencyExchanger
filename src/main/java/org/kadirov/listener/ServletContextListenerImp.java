@@ -1,6 +1,6 @@
 package org.kadirov.listener;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletContext;
 import jakarta.servlet.ServletContextEvent;
 import jakarta.servlet.ServletContextListener;
@@ -10,13 +10,18 @@ import org.kadirov.dao.CurrencyRepositoryImpl;
 import org.kadirov.dao.ExchangeRatesRepository;
 import org.kadirov.dao.ExchangeRatesRepositoryImpl;
 import org.kadirov.datasource.CurrencyExchangerDataSource;
-import org.kadirov.json.JSONReader;
-import org.kadirov.json.JSONReaderImpl;
+import org.kadirov.service.CurrencyService;
+import org.kadirov.service.CurrencyServiceImpl;
+import org.kadirov.service.ExchangeRateService;
+import org.kadirov.service.ExchangeRateServiceImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.InputStream;
+import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Properties;
 
 @WebListener
 public class ServletContextListenerImp implements ServletContextListener {
@@ -25,21 +30,17 @@ public class ServletContextListenerImp implements ServletContextListener {
 
     private CurrencyRepository currencyRepository;
     private ExchangeRatesRepository exchangeRatesRepository;
-    private JSONReader<JsonNode> jsonReader;
+    private ObjectMapper objectMapper;
     private CurrencyExchangerDataSource dataSource;
+    private ExchangeRateService exchangeRateService;
+    private CurrencyService currencyService;
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
         ServletContext servletContext = sce.getServletContext();
 
-        try {
-            DriverManager.registerDriver(new com.mysql.cj.jdbc.Driver());
-        } catch (SQLException sqle) {
-            logger.error("Ошибка при регистрации org.mysql.cj.jdbc.Driver", sqle);
+        if (!initDataSource())
             return;
-        }
-
-        dataSource = new CurrencyExchangerDataSource("jdbc:mysql://localhost:3306/currencyexchanger", "bestuser", "bestuser");
 
         try {
             dataSource.openConnection();
@@ -50,11 +51,15 @@ public class ServletContextListenerImp implements ServletContextListener {
 
         currencyRepository = new CurrencyRepositoryImpl(dataSource);
         exchangeRatesRepository = new ExchangeRatesRepositoryImpl(dataSource);
-        jsonReader = new JSONReaderImpl();
+        objectMapper = new ObjectMapper();
+        exchangeRateService = new ExchangeRateServiceImpl(exchangeRatesRepository);
+        currencyService = new CurrencyServiceImpl(currencyRepository);
 
         servletContext.setAttribute("currencyRepository", currencyRepository);
         servletContext.setAttribute("exchangeRatesRepository", exchangeRatesRepository);
-        servletContext.setAttribute("jsonReader", jsonReader);
+        servletContext.setAttribute("objectMapper", objectMapper);
+        servletContext.setAttribute("dbExchangeRateService", exchangeRateService);
+        servletContext.setAttribute("dbCurrencyService", currencyService);
     }
 
     @Override
@@ -65,5 +70,24 @@ public class ServletContextListenerImp implements ServletContextListener {
         } catch (SQLException sqle) {
             logger.error("Error occurred during close data source connection", sqle);
         }
+    }
+
+    private boolean initDataSource() {
+        try(InputStream input = getClass().getResourceAsStream("/database.properties")){
+            Properties properties = new Properties();
+            properties.load(input);
+
+            DriverManager.registerDriver((Driver) Class.forName(properties.getProperty("driver")).getConstructor().newInstance());
+
+            dataSource = new CurrencyExchangerDataSource(
+                    properties.getProperty("url"),
+                    properties.getProperty("username"),
+                    properties.getProperty("password"));
+            return true;
+        } catch (Exception e) {
+            logger.error("Failed to init DataSource", e);
+        }
+
+        return false;
     }
 }

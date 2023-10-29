@@ -1,4 +1,4 @@
-package org.kadirov.dao.entity;
+package org.kadirov.entity;
 
 public class CurrencyEntity {
     private int id;

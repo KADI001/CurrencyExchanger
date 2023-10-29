@@ -1,4 +1,4 @@
-package org.kadirov.dao.entity;
+package org.kadirov.entity;
 
 import java.math.BigDecimal;
 

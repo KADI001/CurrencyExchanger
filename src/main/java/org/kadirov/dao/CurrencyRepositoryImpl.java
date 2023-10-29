@@ -1,10 +1,10 @@
 package org.kadirov.dao;
 
-import org.kadirov.dao.entity.CurrencyEntity;
+import org.kadirov.entity.CurrencyEntity;
 import org.kadirov.dao.exception.DuplicateResourcesException;
 import org.kadirov.dao.exception.RecordsWithEqualsIdException;
 import org.kadirov.datasource.CurrencyExchangerDataSource;
-import org.kadirov.dao.entity.mapper.CurrencyMapper;
+import org.kadirov.mapper.entity.CurrencyMapper;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -12,6 +12,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class CurrencyRepositoryImpl implements CurrencyRepository {
 
@@ -40,7 +41,7 @@ public class CurrencyRepositoryImpl implements CurrencyRepository {
     }
 
     @Override
-    public CurrencyEntity selectById(int id) throws SQLException {
+    public Optional<CurrencyEntity> selectById(int id) throws SQLException {
         CurrencyEntity targetCurrencyModel = null;
         Connection connection = dataSource.getConnection();
 
@@ -55,11 +56,11 @@ public class CurrencyRepositoryImpl implements CurrencyRepository {
             targetCurrencyModel = currencyMapper.map(resultSet);
         }
 
-        return targetCurrencyModel;
+        return Optional.ofNullable(targetCurrencyModel);
     }
 
     @Override
-    public CurrencyEntity selectByCode(String code) throws SQLException {
+    public Optional<CurrencyEntity> selectByCode(String code) throws SQLException {
         CurrencyEntity targetCurrencyModel = null;
         Connection connection = dataSource.getConnection();
 
@@ -74,10 +75,11 @@ public class CurrencyRepositoryImpl implements CurrencyRepository {
             targetCurrencyModel = currencyMapper.map(resultSet);
         }
 
-        return targetCurrencyModel;
+        return Optional.ofNullable(targetCurrencyModel);
     }
 
     @Override
+    @SuppressWarnings("all")
     public CurrencyEntity insert(final CurrencyEntity currencyModel) throws SQLException {
         Connection connection = dataSource.getConnection();
 
@@ -90,11 +92,10 @@ public class CurrencyRepositoryImpl implements CurrencyRepository {
 
         int executedUpdate = preparedStatement.executeUpdate();
 
-        if(executedUpdate <= 0){
-            return null;
-        }
+        if(executedUpdate <= 0)
+            return currencyModel;
 
-        return selectByCode(currencyModel.getCode());
+        return selectByCode(currencyModel.getCode()).get();
     }
 
     @Override
