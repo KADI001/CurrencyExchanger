@@ -1,6 +1,6 @@
 package org.kadirov.dao;
 
-import org.kadirov.entity.CrossExchangeRateEntity;
+import org.kadirov.dto.CrossExchangeRateDTO;
 import org.kadirov.entity.ExchangeRateEntity;
 import org.kadirov.mapper.entity.CrossExchangeRateEntityMapper;
 import org.kadirov.mapper.entity.ViceVersaCrossExchangeEntityRateMapper;
@@ -159,7 +159,7 @@ public class ExchangeRatesRepositoryImpl implements ExchangeRatesRepository {
     }
 
     @Override
-    public Optional<CrossExchangeRateEntity> selectByFirstTargetCurrencyCodeAndSecondTargetCurrencyCode(String firstTargetCurrencyCode, String secondTargetCurrencyCode) throws SQLException {
+    public Optional<CrossExchangeRateDTO> selectByFirstTargetCurrencyCodeAndSecondTargetCurrencyCode(String firstTargetCurrencyCode, String secondTargetCurrencyCode) throws SQLException {
         Connection connection = dataSource.getConnection();
         String query = String.format("""
                 SELECT r3.*, c.full_name AS b_full_name, c.code AS b_code, c.sign AS b_sign
@@ -182,7 +182,7 @@ public class ExchangeRatesRepositoryImpl implements ExchangeRatesRepository {
 
         ResultSet resultSet = preparedStatement.executeQuery();
 
-        CrossExchangeRateEntity exchangeRateEntities = null;
+        CrossExchangeRateDTO exchangeRateEntities = null;
 
         if(resultSet.next())
             exchangeRateEntities = crossExchangeRateEntityMapper.map(resultSet);
@@ -191,7 +191,7 @@ public class ExchangeRatesRepositoryImpl implements ExchangeRatesRepository {
     }
 
     @Override
-    public Optional<CrossExchangeRateEntity> selectByFirstBaseCurrencyCodeAndSecondBaseCurrencyCode(String firstTargetCurrencyCode, String secondTargetCurrencyCode) throws SQLException {
+    public Optional<CrossExchangeRateDTO> selectByFirstBaseCurrencyCodeAndSecondBaseCurrencyCode(String firstTargetCurrencyCode, String secondTargetCurrencyCode) throws SQLException {
         Connection connection = dataSource.getConnection();
         String query = String.format("""
                 SELECT r3.*, c.full_name AS t_full_name, c.code AS t_code, c.sign AS t_sign
@@ -216,7 +216,7 @@ public class ExchangeRatesRepositoryImpl implements ExchangeRatesRepository {
 
         ResultSet resultSet = preparedStatement.executeQuery();
 
-        CrossExchangeRateEntity exchangeRateEntities = null;
+        CrossExchangeRateDTO exchangeRateEntities = null;
 
         if(resultSet.next())
             exchangeRateEntities = viceVersaCrossExchangeEntityRateMapper.map(resultSet);

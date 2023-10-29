@@ -1,14 +1,12 @@
 package org.kadirov.service;
 
 import org.kadirov.dao.ExchangeRatesRepository;
-import org.kadirov.entity.CrossExchangeRateEntity;
+import org.kadirov.dto.CrossExchangeRateDTO;
 import org.kadirov.entity.ExchangeRateEntity;
 import org.kadirov.mapper.model.*;
 import org.kadirov.model.CrossExchangeRateModel;
 import org.kadirov.model.ExchangeRateModel;
 import org.kadirov.model.ViceVersaCrossExchangeRateModel;
-import org.kadirov.service.exception.CurrencyCodeValidationException;
-import org.kadirov.util.CurrencyCodeUtil;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -94,7 +92,7 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
         ExchangeRateModel result = null;
 
         if (exchangeRatesRepository.existsDoubleByFirstTargetCurrencyCodeAndSecondTargetCurrencyCode(baseCurrencyCode, targetCurrencyCode)) {
-            Optional<CrossExchangeRateEntity> crossExchangeRateEntity =
+            Optional<CrossExchangeRateDTO> crossExchangeRateEntity =
                     exchangeRatesRepository.selectByFirstTargetCurrencyCodeAndSecondTargetCurrencyCode(baseCurrencyCode, targetCurrencyCode);
 
             if (crossExchangeRateEntity.isPresent()) {
@@ -111,7 +109,7 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
     public Optional<ExchangeRateModel> getViceVersaCrossExchangeRateByCode(String baseCurrencyCode, String targetCurrencyCode) throws SQLException {
         ExchangeRateModel result = null;
         if (exchangeRatesRepository.existsDoubleByFirstBaseCurrencyCodeAndSecondBaseCurrencyCode(baseCurrencyCode, targetCurrencyCode)) {
-            Optional<CrossExchangeRateEntity> crossExchangeRateEntity =
+            Optional<CrossExchangeRateDTO> crossExchangeRateEntity =
                     exchangeRatesRepository.selectByFirstBaseCurrencyCodeAndSecondBaseCurrencyCode(baseCurrencyCode, targetCurrencyCode);
 
             if (crossExchangeRateEntity.isPresent()) {

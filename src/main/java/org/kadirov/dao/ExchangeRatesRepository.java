@@ -1,6 +1,6 @@
 package org.kadirov.dao;
 
-import org.kadirov.entity.CrossExchangeRateEntity;
+import org.kadirov.dto.CrossExchangeRateDTO;
 import org.kadirov.entity.ExchangeRateEntity;
 
 import java.math.BigDecimal;
@@ -14,8 +14,8 @@ public interface ExchangeRatesRepository {
     boolean existsByBaseCurrencyCodeAndTargetCurrencyCode(String baseCurrencyCode, String targetCurrencyCode) throws SQLException;
     ExchangeRateEntity insert(final ExchangeRateEntity exchangeRateEntity) throws SQLException;
     ExchangeRateEntity updateRateByBaseCurrencyCodeAndTargetCurrencyCode(String baseCurrencyCode, String targetCurrencyCode, BigDecimal rate) throws SQLException;
-    Optional<CrossExchangeRateEntity> selectByFirstTargetCurrencyCodeAndSecondTargetCurrencyCode(String firstTargetCurrencyCode, String secondTargetCurrencyCode) throws SQLException;
-    Optional<CrossExchangeRateEntity> selectByFirstBaseCurrencyCodeAndSecondBaseCurrencyCode(String firstTargetCurrencyCode, String secondTargetCurrencyCode) throws SQLException;
+    Optional<CrossExchangeRateDTO> selectByFirstTargetCurrencyCodeAndSecondTargetCurrencyCode(String firstTargetCurrencyCode, String secondTargetCurrencyCode) throws SQLException;
+    Optional<CrossExchangeRateDTO> selectByFirstBaseCurrencyCodeAndSecondBaseCurrencyCode(String firstTargetCurrencyCode, String secondTargetCurrencyCode) throws SQLException;
     boolean existsDoubleByFirstTargetCurrencyCodeAndSecondTargetCurrencyCode(String firstTargetCurrencyCode, String secondTargetCurrencyCode) throws SQLException;
     boolean existsDoubleByFirstBaseCurrencyCodeAndSecondBaseCurrencyCode(String firstTargetCurrencyCode, String secondTargetCurrencyCode) throws SQLException;
 }

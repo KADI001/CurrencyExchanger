@@ -1,6 +1,6 @@
 package org.kadirov.mapper.entity;
 
-import org.kadirov.entity.CrossExchangeRateEntity;
+import org.kadirov.dto.CrossExchangeRateDTO;
 import org.kadirov.entity.CurrencyEntity;
 import org.kadirov.entity.ExchangeRateEntity;
 import org.kadirov.mapper.Mapper;
@@ -10,9 +10,9 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-public class ViceVersaCrossExchangeEntityRateMapper implements Mapper<ResultSet, CrossExchangeRateEntity> {
+public class ViceVersaCrossExchangeEntityRateMapper implements Mapper<ResultSet, CrossExchangeRateDTO> {
     @Override
-    public CrossExchangeRateEntity map(ResultSet resultSet) throws MappingException {
+    public CrossExchangeRateDTO map(ResultSet resultSet) throws MappingException {
         try {
             int firstId = resultSet.getInt("first_id");
 
@@ -41,7 +41,7 @@ public class ViceVersaCrossExchangeEntityRateMapper implements Mapper<ResultSet,
 
             ExchangeRateEntity firstExchangeRateEntity = new ExchangeRateEntity(firstId, firstBaseCurrency, targetCurrency, firstRate);
             ExchangeRateEntity secondExchangeRateEntity = new ExchangeRateEntity(secondId, secondBaseCurrency, targetCurrency, secondRate);
-            return new CrossExchangeRateEntity(firstExchangeRateEntity, secondExchangeRateEntity);
+            return new CrossExchangeRateDTO(firstExchangeRateEntity, secondExchangeRateEntity);
         } catch (SQLException sqle) {
             throw new MappingException(sqle);
         }
