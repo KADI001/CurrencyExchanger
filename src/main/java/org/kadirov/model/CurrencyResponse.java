@@ -1,8 +1,8 @@
 package org.kadirov.model;
 
-public record CurrencyModel(
-        String fullName,
+public record CurrencyResponse(
         String code,
+        String name,
         String sign
 ) {
 }

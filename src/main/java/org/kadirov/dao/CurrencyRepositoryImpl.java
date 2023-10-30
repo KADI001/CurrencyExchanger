@@ -87,7 +87,7 @@ public class CurrencyRepositoryImpl implements CurrencyRepository {
                 connection.prepareStatement(
                         String.format("INSERT INTO currencies (code, full_name, sign) VALUES ('%s','%s','%s')",
                                 currencyModel.getCode(),
-                                currencyModel.getFullName(),
+                                currencyModel.getName(),
                                 currencyModel.getSign()));
 
         int executedUpdate = preparedStatement.executeUpdate();

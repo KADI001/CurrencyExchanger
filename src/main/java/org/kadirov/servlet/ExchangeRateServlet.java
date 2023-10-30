@@ -1,24 +1,25 @@
 package org.kadirov.servlet;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletContext;
-import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.kadirov.model.ErrorModel;
-import org.kadirov.model.ExchangeRateModel;
+import org.kadirov.dao.ExchangeRatesRepository;
+import org.kadirov.entity.ExchangeRateEntity;
+import org.kadirov.mapper.model.ExchangeRateResponseMapper;
+import org.kadirov.model.ErrorResponse;
 import org.kadirov.service.ExchangeRateService;
-import org.kadirov.service.exception.CurrencyCodeValidationException;
 import org.kadirov.util.CurrencyCodeUtil;
 import org.kadirov.util.DBExceptionMessages;
+import org.kadirov.util.HttpRequestUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.SQLException;
@@ -30,32 +31,38 @@ public class ExchangeRateServlet extends HttpServlet {
     private static final Logger logger = LoggerFactory.getLogger(ExchangeRateServlet.class);
 
     private ExchangeRateService exchangeRateService;
+    private ExchangeRatesRepository exchangeRatesRepository;
+    private ExchangeRateResponseMapper exchangeRateResponseMapper;
     private ObjectMapper objectMapper;
 
     @Override
-    public void init(ServletConfig config) throws ServletException {
+    public void init(ServletConfig config) {
         ServletContext servletContext = config.getServletContext();
 
         exchangeRateService = (ExchangeRateService) servletContext.getAttribute("dbExchangeRateService");
+        exchangeRatesRepository = (ExchangeRatesRepository) servletContext.getAttribute("exchangeRatesRepository");
+        exchangeRateResponseMapper = (ExchangeRateResponseMapper) servletContext.getAttribute("exchangeRateResponseMapper");
         objectMapper = (ObjectMapper) servletContext.getAttribute("objectMapper");
     }
 
     @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         String requestURI = req.getRequestURI();
         String[] splittedRequestURI = requestURI.split("/");
 
         if (!splittedRequestURI[splittedRequestURI.length - 2].equals("exchangeRate")) {
+            logger.warn("The request path is not valid");
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            objectMapper.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_BAD_REQUEST, "There is no any code pair in the URL path"));
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_BAD_REQUEST, "The request path is not valid"));
             return;
         }
 
         String codePair = splittedRequestURI[splittedRequestURI.length - 1];
 
         if (codePair.length() != 6) {
+            logger.warn("The currency pair is not valid");
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            objectMapper.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_BAD_REQUEST, "The code pair in the URL path is wrong"));
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_BAD_REQUEST, "The code pair in the URL path is wrong"));
             return;
         }
 
@@ -63,34 +70,38 @@ public class ExchangeRateServlet extends HttpServlet {
         String targetCurrencyCode = codePair.substring(3);
 
         if(!CurrencyCodeUtil.exists(baseCurrencyCode)){
+            logger.warn("The assigned request parameter 'base currency code' doesn't exist");
             resp.setStatus(HttpServletResponse.SC_CONFLICT);
-            objectMapper.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_CONFLICT, "The currency code, that you set to baseCurrencyCode, doesn't exist"));
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_CONFLICT, "The currency code, that you set to baseCurrencyCode, doesn't exist"));
             return;
         }
 
         if(!CurrencyCodeUtil.exists(targetCurrencyCode)){
+            logger.warn("The assigned request parameter 'target currency code' doesn't exist");
             resp.setStatus(HttpServletResponse.SC_CONFLICT);
-            objectMapper.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_CONFLICT, "The currency code, that you set to targetCurrencyCode, doesn't exist"));
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_CONFLICT, "The currency code, that you set to targetCurrencyCode, doesn't exist"));
             return;
         }
 
-        Optional<ExchangeRateModel> exchangeRateModel;
+        Optional<ExchangeRateEntity> exchangeRateModel;
 
         try {
             exchangeRateModel = exchangeRateService.getDirectExchangeRateByCode(baseCurrencyCode, targetCurrencyCode);
-        } catch (SQLException e) {
+        } catch (SQLException sqle) {
+            logger.error("Error occurred during getDirectExchangeRateByCode in exchangeRateService", sqle);
             resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            objectMapper.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, DBExceptionMessages.TROUBLE));
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, DBExceptionMessages.TROUBLE));
             return;
         }
 
         if (exchangeRateModel.isPresent()) {
             resp.setStatus(HttpServletResponse.SC_OK);
-            objectMapper.writeValue(resp.getWriter(), exchangeRateModel.get());
+            objectMapper.writeValue(resp.getWriter(), exchangeRateResponseMapper.map(exchangeRateModel.get()));
         } else {
+            logger.warn("There is no any exchange rate");
             resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
             objectMapper.writeValue(resp.getWriter(),
-                    new ErrorModel(HttpServletResponse.SC_NOT_FOUND, "Failed to find the exchange rate for currencies with those codes"));
+                    new ErrorResponse(HttpServletResponse.SC_NOT_FOUND, "Failed to find the exchange rate for currencies with those codes"));
         }
     }
 
@@ -100,16 +111,18 @@ public class ExchangeRateServlet extends HttpServlet {
         String[] splittedRequestURI = requestURI.split("/");
 
         if (!splittedRequestURI[splittedRequestURI.length - 2].equals("exchangeRate")) {
+            logger.warn("The request path is not valid");
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            objectMapper.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_BAD_REQUEST, "There is no any code pair in the URL path"));
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_BAD_REQUEST, "There is no any code pair in the URL path"));
             return;
         }
 
         String codePair = splittedRequestURI[splittedRequestURI.length - 1];
 
         if (codePair.length() != 6) {
+            logger.warn("The currency pair is not valid");
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            objectMapper.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_BAD_REQUEST, "The code pair in the URL path is wrong"));
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_BAD_REQUEST, "The code pair in the URL path is wrong"));
             return;
         }
 
@@ -117,54 +130,66 @@ public class ExchangeRateServlet extends HttpServlet {
         String targetCurrencyCode = codePair.substring(3);
 
         if(!CurrencyCodeUtil.exists(baseCurrencyCode)){
+            logger.warn("The assigned request parameter 'base currency code' doesn't exist");
             resp.setStatus(HttpServletResponse.SC_CONFLICT);
-            objectMapper.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_CONFLICT, "The currency code, that you set to baseCurrencyCode, doesn't exist"));
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_CONFLICT, "The currency code, that you set to baseCurrencyCode, doesn't exist"));
             return;
         }
 
         if(!CurrencyCodeUtil.exists(targetCurrencyCode)){
+            logger.warn("The assigned request parameter 'target currency code' doesn't exist");
             resp.setStatus(HttpServletResponse.SC_CONFLICT);
-            objectMapper.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_CONFLICT, "The currency code, that you set to targetCurrencyCode, doesn't exist"));
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_CONFLICT, "The currency code, that you set to targetCurrencyCode, doesn't exist"));
             return;
         }
 
-        StringBuilder requestJsonBodyContent = new StringBuilder();
-        BufferedReader reader = req.getReader();
+        JsonNode rootNode;
 
-        String temp;
-        while ((temp = reader.readLine()) != null)
-            requestJsonBodyContent.append(temp);
-
-        JsonNode rootNode = objectMapper.readTree(requestJsonBodyContent.toString());
+        try {
+            rootNode = objectMapper.readTree(HttpRequestUtil.extractBodyAsString(req));
+        } catch (JsonProcessingException jpe){
+            logger.error("Failed to parse request body content into json node", jpe);
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_BAD_REQUEST, "Not valid json body"));
+            return;
+        }
 
         JsonNode rateNode = rootNode.get("rate");
 
-        if (rateNode.isNull()) {
+        if (rateNode == null) {
+            logger.warn("Couldn't find required filed 'rate' in json");
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            objectMapper.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_BAD_REQUEST, "You don't specify 'rate' field"));
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_BAD_REQUEST, "You don't specify 'rate' field"));
             return;
         }
 
         BigDecimal rate = rateNode.decimalValue();
-        ExchangeRateModel updatedExchangeRateModel;
 
-        try {
-            if (!exchangeRateService.existsExchangeRateByBaseCodeAndTargetCode(baseCurrencyCode, targetCurrencyCode)) {
-                resp.setStatus(HttpServletResponse.SC_CONFLICT);
-                objectMapper.writeValue(resp.getWriter(),
-                        new ErrorModel(HttpServletResponse.SC_CONFLICT, "There's no one the exchange rate for those currencies"));
-                return;
-            }
-
-            updatedExchangeRateModel = exchangeRateService.update(baseCurrencyCode, targetCurrencyCode, rate);
-
-        } catch (SQLException e) {
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            objectMapper.writeValue(resp.getWriter(), new ErrorModel(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, DBExceptionMessages.TROUBLE));
+        if(rate.equals(BigDecimal.ZERO)){
+            logger.warn("The filed 'rate' in json is not valid");
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_BAD_REQUEST, "The 'rate' field in json body is not valid"));
             return;
         }
 
-        resp.setStatus(HttpServletResponse.SC_OK);
-        objectMapper.writeValue(resp.getWriter(), updatedExchangeRateModel);
+        try {
+            if (!exchangeRatesRepository.existsByBaseCurrencyCodeAndTargetCurrencyCode(baseCurrencyCode, targetCurrencyCode)) {
+                logger.warn("There is no one exchange rate with that base currency code, target currency code");
+                resp.setStatus(HttpServletResponse.SC_CONFLICT);
+                objectMapper.writeValue(resp.getWriter(),
+                        new ErrorResponse(HttpServletResponse.SC_CONFLICT, "There's no one the exchange rate for those currencies"));
+                return;
+            }
+
+            ExchangeRateEntity exchangeRateEntity =
+                    exchangeRatesRepository.updateRateByBaseCurrencyCodeAndTargetCurrencyCode(baseCurrencyCode, targetCurrencyCode, rate);
+
+            resp.setStatus(HttpServletResponse.SC_OK);
+            objectMapper.writeValue(resp.getWriter(), exchangeRateResponseMapper.map(exchangeRateEntity));
+        } catch (SQLException sqle) {
+            logger.error("Error occurred during updateRateByBaseCurrencyCodeAndTargetCurrencyCode in exchangerates table", sqle);
+            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            objectMapper.writeValue(resp.getWriter(), new ErrorResponse(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, DBExceptionMessages.TROUBLE));
+        }
     }
 }

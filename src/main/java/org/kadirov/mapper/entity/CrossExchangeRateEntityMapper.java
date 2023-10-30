@@ -14,9 +14,6 @@ public class CrossExchangeRateEntityMapper implements Mapper<ResultSet, CrossExc
     @Override
     public CrossExchangeRateDTO map(ResultSet resultSet) throws MappingException {
         try {
-            int firstId = resultSet.getInt("first_id");
-
-            int secondId = resultSet.getInt("second_id");
             int baseCurrencyId = resultSet.getInt("base_currency_id");
             int firstTargetCurrencyId = resultSet.getInt("first_target_currency_id");
             BigDecimal firstRate = resultSet.getBigDecimal("first_rate");
@@ -32,17 +29,14 @@ public class CrossExchangeRateEntityMapper implements Mapper<ResultSet, CrossExc
             String secondTargetCurrencyFullName = resultSet.getString("stc_full_name");
             String secondTargetCurrencySign = resultSet.getString("stc_sign");
 
-            CurrencyEntity baseCurrency = new
-                    CurrencyEntity(baseCurrencyId, baseCurrencyCode, baseCurrencyFullName, baseCurrencySign);
+            CurrencyEntity baseCurrency =
+                    new CurrencyEntity(baseCurrencyId, baseCurrencyCode, baseCurrencyFullName, baseCurrencySign);
             CurrencyEntity firstTargetCurrency =
                     new CurrencyEntity(firstTargetCurrencyId, firstTargetCurrencyCode, firstTargetCurrencyFullName, firstTargetCurrencySign);
             CurrencyEntity secondTargetCurrency =
                     new CurrencyEntity(secondTargetCurrencyId, secondTargetCurrencyCode, secondTargetCurrencyFullName, secondTargetCurrencySign);
 
-            ExchangeRateEntity firstExchangeRateEntity = new ExchangeRateEntity(firstId, baseCurrency, firstTargetCurrency, firstRate);
-            ExchangeRateEntity secondExchangeRateEntity = new ExchangeRateEntity(secondId, baseCurrency, secondTargetCurrency, secondRate);
-
-            return new CrossExchangeRateDTO(firstExchangeRateEntity, secondExchangeRateEntity);
+            return new CrossExchangeRateDTO(baseCurrency, firstTargetCurrency, secondTargetCurrency, firstRate, secondRate);
         } catch (SQLException sqle) {
             throw new MappingException(sqle);
         }

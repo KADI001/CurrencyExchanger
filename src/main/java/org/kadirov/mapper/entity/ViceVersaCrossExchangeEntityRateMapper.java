@@ -1,6 +1,6 @@
 package org.kadirov.mapper.entity;
 
-import org.kadirov.dto.CrossExchangeRateDTO;
+import org.kadirov.dto.ViceVersaCrossExchangeRateDTO;
 import org.kadirov.entity.CurrencyEntity;
 import org.kadirov.entity.ExchangeRateEntity;
 import org.kadirov.mapper.Mapper;
@@ -10,13 +10,10 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-public class ViceVersaCrossExchangeEntityRateMapper implements Mapper<ResultSet, CrossExchangeRateDTO> {
+public class ViceVersaCrossExchangeEntityRateMapper implements Mapper<ResultSet, ViceVersaCrossExchangeRateDTO> {
     @Override
-    public CrossExchangeRateDTO map(ResultSet resultSet) throws MappingException {
+    public ViceVersaCrossExchangeRateDTO map(ResultSet resultSet) throws MappingException {
         try {
-            int firstId = resultSet.getInt("first_id");
-
-            int secondId = resultSet.getInt("second_id");
             int targetCurrencyId = resultSet.getInt("target_currency_id");
             int firstBaseCurrencyId = resultSet.getInt("first_base_currency_id");
             BigDecimal firstRate = resultSet.getBigDecimal("first_rate");
@@ -32,16 +29,14 @@ public class ViceVersaCrossExchangeEntityRateMapper implements Mapper<ResultSet,
             String secondBaseCurrencyFullName = resultSet.getString("sbc_full_name");
             String secondBaseCurrencySign = resultSet.getString("sbc_sign");
 
-            CurrencyEntity targetCurrency = new
-                    CurrencyEntity(targetCurrencyId, targetCurrencyCode, targetCurrencyFullName, targetCurrencySign);
+            CurrencyEntity targetCurrency =
+                    new CurrencyEntity(targetCurrencyId, targetCurrencyCode, targetCurrencyFullName, targetCurrencySign);
             CurrencyEntity firstBaseCurrency =
                     new CurrencyEntity(firstBaseCurrencyId, firstBaseCurrencyCode, firstBaseCurrencyFullName, firstBaseCurrencySign);
             CurrencyEntity secondBaseCurrency =
                     new CurrencyEntity(secondBaseCurrencyId, secondBaseCurrencyCode, secondBaseCurrencyFullName, secondBaseCurrencySign);
 
-            ExchangeRateEntity firstExchangeRateEntity = new ExchangeRateEntity(firstId, firstBaseCurrency, targetCurrency, firstRate);
-            ExchangeRateEntity secondExchangeRateEntity = new ExchangeRateEntity(secondId, secondBaseCurrency, targetCurrency, secondRate);
-            return new CrossExchangeRateDTO(firstExchangeRateEntity, secondExchangeRateEntity);
+            return new ViceVersaCrossExchangeRateDTO(targetCurrency, firstBaseCurrency, secondBaseCurrency, firstRate, secondRate);
         } catch (SQLException sqle) {
             throw new MappingException(sqle);
         }

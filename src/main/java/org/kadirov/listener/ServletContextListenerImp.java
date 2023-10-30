@@ -10,14 +10,17 @@ import org.kadirov.dao.CurrencyRepositoryImpl;
 import org.kadirov.dao.ExchangeRatesRepository;
 import org.kadirov.dao.ExchangeRatesRepositoryImpl;
 import org.kadirov.datasource.CurrencyExchangerDataSource;
-import org.kadirov.service.CurrencyService;
-import org.kadirov.service.CurrencyServiceImpl;
+import org.kadirov.mapper.model.CurrencyResponseMapper;
+import org.kadirov.mapper.model.ExchangeRateResponseMapper;
 import org.kadirov.service.ExchangeRateService;
 import org.kadirov.service.ExchangeRateServiceImpl;
+import org.kadirov.util.EnvUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.Properties;
@@ -33,7 +36,8 @@ public class ServletContextListenerImp implements ServletContextListener {
     private ObjectMapper objectMapper;
     private CurrencyExchangerDataSource dataSource;
     private ExchangeRateService exchangeRateService;
-    private CurrencyService currencyService;
+    private CurrencyResponseMapper currencyResponseMapper;
+    private ExchangeRateResponseMapper exchangeRateResponseMapper;
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
@@ -49,18 +53,22 @@ public class ServletContextListenerImp implements ServletContextListener {
             return;
         }
 
-        //todo: Разделить проверку и создание для каждой таблицы
-        if(!isRequiredTablesCreated("currencies", "exchangerates")){
-            if (!applySQLFile("init.sql"))
+        if (!isRequiredTableCreated("currencies")) {
+            if (!applySQLFile("initCurrenciesTable.sql"))
                 return;
         }
 
-        if(isTableEmpty("currencies")){
+        if (!isRequiredTableCreated("exchangerates")) {
+            if (!applySQLFile("initExchangeRatesTable.sql"))
+                return;
+        }
+
+        if (isTableEmpty("currencies")) {
             if (!applySQLFile("fillTableCurrenciesWithDefaultData.sql"))
                 return;
         }
 
-        if(isTableEmpty("exchangerates")){
+        if (isTableEmpty("exchangerates")) {
             if (!applySQLFile("fillTableExchangeRatesWithDefaultData.sql"))
                 return;
         }
@@ -69,19 +77,22 @@ public class ServletContextListenerImp implements ServletContextListener {
         exchangeRatesRepository = new ExchangeRatesRepositoryImpl(dataSource);
         objectMapper = new ObjectMapper();
         exchangeRateService = new ExchangeRateServiceImpl(exchangeRatesRepository);
-        currencyService = new CurrencyServiceImpl(currencyRepository);
+        currencyResponseMapper = new CurrencyResponseMapper();
+        exchangeRateResponseMapper = new ExchangeRateResponseMapper(currencyResponseMapper);
+
 
         servletContext.setAttribute("currencyRepository", currencyRepository);
         servletContext.setAttribute("exchangeRatesRepository", exchangeRatesRepository);
         servletContext.setAttribute("objectMapper", objectMapper);
         servletContext.setAttribute("dbExchangeRateService", exchangeRateService);
-        servletContext.setAttribute("dbCurrencyService", currencyService);
+        servletContext.setAttribute("currencyResponseMapper", currencyResponseMapper);
+        servletContext.setAttribute("exchangeRateResponseMapper", exchangeRateResponseMapper);
     }
 
     @Override
     public void contextDestroyed(ServletContextEvent sce) {
         try {
-            if(dataSource != null)
+            if (dataSource != null)
                 dataSource.closeConnection();
         } catch (SQLException sqle) {
             logger.error("Error occurred during close data source connection", sqle);
@@ -89,7 +100,7 @@ public class ServletContextListenerImp implements ServletContextListener {
     }
 
     private boolean isTableEmpty(String table) {
-        if(dataSource == null)
+        if (dataSource == null)
             throw new RuntimeException("Failed to check that if table is empty cause DataSource is not initialized");
 
         Connection connection = dataSource.getConnection();
@@ -101,7 +112,7 @@ public class ServletContextListenerImp implements ServletContextListener {
             PreparedStatement preparedStatement = connection.prepareStatement("SELECT COUNT(*) FROM " + table + ";");
             ResultSet resultSet = preparedStatement.executeQuery();
 
-            if(resultSet.next()){
+            if (resultSet.next()) {
                 int count = resultSet.getInt(1);
                 return count == 0;
             }
@@ -112,14 +123,11 @@ public class ServletContextListenerImp implements ServletContextListener {
         return false;
     }
 
-    private boolean isRequiredTablesCreated(String... tables) {
-        if(dataSource == null)
+    private boolean isRequiredTableCreated(String targetTable) {
+        if (dataSource == null)
             throw new RuntimeException("Failed to check that if table exists cause DataSource is not initialized");
 
         Connection connection = dataSource.getConnection();
-
-        int amount = tables.length;
-        int found = 0;
 
         try {
             if (connection.isClosed())
@@ -127,39 +135,32 @@ public class ServletContextListenerImp implements ServletContextListener {
 
             PreparedStatement preparedStatement = connection.prepareStatement("show tables;");
             ResultSet resultSet = preparedStatement.executeQuery();
+            String columnName = "Tables_in_currencyexchanger";
 
-            while (resultSet.next()){
-                if(amount == found)
-                    break;
+            while (resultSet.next()) {
+                String tableName = resultSet.getString(columnName);
 
-                String tableName = resultSet.getString("Tables_in_currencyexchanger");
-
-                for (String table : tables) {
-                    if(tableName.equals(table)){
-                        found++;
-                        break;
-                    }
-                }
+                if (tableName.equals(targetTable))
+                    return true;
             }
-
-            return amount == found;
         } catch (SQLException e) {
             logger.error("Exception occurred during table exists check");
-            return false;
         }
+
+        return false;
     }
 
-    private boolean applySQLFile(String fileName){
-        if(dataSource == null)
+    private boolean applySQLFile(String fileName) {
+        if (dataSource == null)
             return false;
 
         Connection connection = dataSource.getConnection();
 
-        try(InputStream inputStream = getClass().getResourceAsStream("/" + fileName)){
+        try (InputStream inputStream = getClass().getResourceAsStream("/" + fileName)) {
             if (connection.isClosed())
                 return false;
 
-            if(inputStream == null)
+            if (inputStream == null)
                 return false;
 
             String initFile = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
@@ -174,29 +175,57 @@ public class ServletContextListenerImp implements ServletContextListener {
             }
 
             return true;
-        }catch (Exception e){
+        } catch (Exception e) {
             logger.debug("Failed to apply the query.", e);
             return false;
         }
     }
 
     private boolean initDataSource() {
-        //todo: Брать свойства из переменных окружения, а если их там нет, то из database.properties файл
-        try(InputStream input = getClass().getResourceAsStream("/database.properties")){
-            Properties properties = new Properties();
-            properties.load(input);
+        String dbUrl;
+        String dbUsername;
+        String dbPassword;
+        String dbDriver;
 
-            DriverManager.registerDriver((Driver) Class.forName(properties.getProperty("driver")).getConstructor().newInstance());
+        if (EnvUtil.exists("DB_URL") && EnvUtil.exists("DB_USERNAME")
+                && EnvUtil.exists("DB_PASSWORD") && EnvUtil.exists("DB_DRIVER")) {
 
-            dataSource = new CurrencyExchangerDataSource(
-                    properties.getProperty("url"),
-                    properties.getProperty("username"),
-                    properties.getProperty("password"));
-            return true;
-        } catch (Exception e) {
-            logger.error("Failed to init DataSource", e);
+            dbUrl = System.getenv("DB_URL");
+            dbUsername = System.getenv("DB_USERNAME");
+            dbPassword = System.getenv("DB_PASSWORD");
+            dbDriver = System.getenv("DB_DRIVER");
+
+        } else {
+            try (InputStream input = getClass().getResourceAsStream("/database.properties")) {
+                if(input == null)
+                    return false;
+
+                Properties properties = new Properties();
+                properties.load(input);
+
+                dbUrl = properties.getProperty("url");
+                dbUsername = properties.getProperty("username");
+                dbPassword = properties.getProperty("password");
+                dbDriver = properties.getProperty("driver");
+            } catch (IOException e) {
+                logger.error("Failed to load database.properties in Properties type");
+                return false;
+            }
         }
 
-        return false;
+        if(dbUrl == null || dbUsername == null || dbPassword == null || dbDriver == null) {
+            logger.error("Failed to find db connection params: url, username, password, driver");
+            return false;
+        }
+
+        try {
+            DriverManager.registerDriver((Driver) Class.forName(dbDriver).getConstructor().newInstance());
+        } catch (Exception e) {
+            logger.error("Failed register db driver by parameter driver", e);
+            return false;
+        }
+
+        dataSource = new CurrencyExchangerDataSource(dbUrl, dbUsername, dbPassword);
+        return true;
     }
 }

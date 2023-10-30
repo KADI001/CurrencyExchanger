@@ -1,6 +1,6 @@
 package org.kadirov.model;
 
-public record ErrorModel(
+public record ErrorResponse(
         int statusCode,
         String message
 ) {

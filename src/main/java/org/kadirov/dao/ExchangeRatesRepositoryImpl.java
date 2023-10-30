@@ -1,6 +1,7 @@
 package org.kadirov.dao;
 
 import org.kadirov.dto.CrossExchangeRateDTO;
+import org.kadirov.dto.ViceVersaCrossExchangeRateDTO;
 import org.kadirov.entity.ExchangeRateEntity;
 import org.kadirov.mapper.entity.CrossExchangeRateEntityMapper;
 import org.kadirov.mapper.entity.ViceVersaCrossExchangeEntityRateMapper;
@@ -121,21 +122,18 @@ public class ExchangeRatesRepositoryImpl implements ExchangeRatesRepository {
 
     @Override
     @SuppressWarnings("all")
-    public ExchangeRateEntity insert(final ExchangeRateEntity exchangeRateEntity) throws SQLException {
+    public void insert(int baseCurrencyId, int targetCurrencyId, BigDecimal rate) throws SQLException {
         Connection connection = dataSource.getConnection();
 
         PreparedStatement preparedStatement = connection.prepareStatement(String.format("""
                 INSERT INTO exchangerates (base_currency_id, target_currency_id, rate)
                 VALUES ('%s', '%s', '%s');
-                """, exchangeRateEntity.getBaseCurrency().getId(), exchangeRateEntity.getTargetCurrency().getId(), exchangeRateEntity.getRate()));
+                """, baseCurrencyId, targetCurrencyId, rate));
 
         int executedUpdate = preparedStatement.executeUpdate();
 
         if(executedUpdate <= 0)
-            return exchangeRateEntity;
-
-        return selectByBaseCurrencyCodeAndTargetCurrencyCode(exchangeRateEntity.getBaseCurrency().getCode(), exchangeRateEntity.getTargetCurrency().getCode())
-                .get();
+            throw new SQLException("Failed to add a record");
     }
 
     @Override
@@ -182,26 +180,26 @@ public class ExchangeRatesRepositoryImpl implements ExchangeRatesRepository {
 
         ResultSet resultSet = preparedStatement.executeQuery();
 
-        CrossExchangeRateDTO exchangeRateEntities = null;
+        CrossExchangeRateDTO crossExchangeRateDTO = null;
 
         if(resultSet.next())
-            exchangeRateEntities = crossExchangeRateEntityMapper.map(resultSet);
+            crossExchangeRateDTO = crossExchangeRateEntityMapper.map(resultSet);
 
-        return Optional.ofNullable(exchangeRateEntities);
+        return Optional.ofNullable(crossExchangeRateDTO);
     }
 
     @Override
-    public Optional<CrossExchangeRateDTO> selectByFirstBaseCurrencyCodeAndSecondBaseCurrencyCode(String firstTargetCurrencyCode, String secondTargetCurrencyCode) throws SQLException {
+    public Optional<ViceVersaCrossExchangeRateDTO> selectByFirstBaseCurrencyCodeAndSecondBaseCurrencyCode(String firstTargetCurrencyCode, String secondTargetCurrencyCode) throws SQLException {
         Connection connection = dataSource.getConnection();
         String query = String.format("""
                 SELECT r3.*, c.full_name AS t_full_name, c.code AS t_code, c.sign AS t_sign
                 FROM (SELECT
-                r1.id AS first_id, r1.base_currency_id AS first_base_currency_id, r1.full_name AS fbc_full_name,
+                r1.base_currency_id AS first_base_currency_id, r1.full_name AS fbc_full_name,
                 r1.code AS fbc_code, r1.sign AS fbc_sign, r1.rate AS first_rate,
-                r2.id AS second_id, r2.base_currency_id AS second_base_currency_id, r2.full_name AS sbc_full_name, 
+                r2.base_currency_id AS second_base_currency_id, r2.full_name AS sbc_full_name,
                 r2.code AS sbc_code, r2.sign AS sbc_sign, r2.rate AS second_rate,
                 r1.target_currency_id AS target_currency_id
-                FROM (SELECT * 
+                FROM (SELECT *
                 FROM (SELECT er.*, c.full_name, c.code, c.sign FROM exchangerates er JOIN currencies c ON er.base_currency_id=c.id) res1 
                 WHERE res1.code="%s") r1
                 JOIN (SELECT * 
@@ -216,12 +214,12 @@ public class ExchangeRatesRepositoryImpl implements ExchangeRatesRepository {
 
         ResultSet resultSet = preparedStatement.executeQuery();
 
-        CrossExchangeRateDTO exchangeRateEntities = null;
+        ViceVersaCrossExchangeRateDTO viceVersaCrossExchangeRateDTO = null;
 
         if(resultSet.next())
-            exchangeRateEntities = viceVersaCrossExchangeEntityRateMapper.map(resultSet);
+            viceVersaCrossExchangeRateDTO = viceVersaCrossExchangeEntityRateMapper.map(resultSet);
 
-        return Optional.ofNullable(exchangeRateEntities);
+        return Optional.ofNullable(viceVersaCrossExchangeRateDTO);
     }
 
     @Override

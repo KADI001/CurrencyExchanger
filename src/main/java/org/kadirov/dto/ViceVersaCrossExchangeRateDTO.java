@@ -4,8 +4,8 @@ import org.kadirov.entity.CurrencyEntity;
 
 import java.math.BigDecimal;
 
-public record CrossExchangeRateDTO(
-        CurrencyEntity baseCurrency,
+public record ViceVersaCrossExchangeRateDTO(
+        CurrencyEntity targetCurrency,
         CurrencyEntity firstCurrency,
         CurrencyEntity secondCurrency,
         BigDecimal firstExchangeRate,
